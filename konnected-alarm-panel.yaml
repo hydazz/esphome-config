@@ -1,33 +1,22 @@
 ---
-# settings
 substitutions:
-  name: konnected-alarm-panel
+  system_name: konnected-alarm-panel
   friendly_name: Konnected Alarm Panel
+  device_description: Konnected Alarm Panel Pro
+  name: konnected-alarm-panel
+
 packages:
+  device: !include
+    file: esp32-ethernet/base.yaml
   konnected.alarm-panel-pro-ethernet: github://konnected-io/konnected-esphome/alarm-panel-pro-v1.8-ethernet.yaml@master
+
 esphome:
   name_add_mac_suffix: false
-esp32:
-  board: wesp32
-  framework:
-    type: esp-idf
 
 # remove unused components
 web_server: !remove
 mdns: !remove
-
-ethernet:
-  use_address: 192.168.2.158
-
-logger:
-
-api:
-  encryption:
-    key: !secret api_key
-
-ota:
-  - platform: esphome
-    password: !secret ota_password
+button: !remove
 
 # configuration
 sensor:

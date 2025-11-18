@@ -1,0 +1,19 @@
+---
+substitutions:
+  wifi_db_id: wifi_signal_db
+  wifi_percent_id: wifi_signal_percent
+
+wifi:
+  ap: {}
+  domain: .iot
+  networks:
+    - ssid: !secret wifi_ssid
+      password: !secret wifi_password
+      priority: 0.0
+
+sensor:
+  - platform: wifi_signal # Reports the WiFi signal strength in dB
+    name: WiFi Signal dB
+    id: ${wifi_db_id}
+    update_interval: 60s
+    entity_category: diagnostic

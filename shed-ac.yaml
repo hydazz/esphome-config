@@ -1,26 +1,12 @@
 ---
-# settings
-esphome:
-  name: shed-ac
+substitutions:
+  system_name: shed-ac
   friendly_name: Shed AC
-esp8266:
-  board: nodemcuv2
+  device_description: NodeMCU-based Coolix IR controller with DHT sensor
 
-wifi:
-  ssid: !secret wifi_ssid
-  password: !secret wifi_password
-  use_address: 192.168.2.9
-  domain: .iot
-
-logger:
-
-api:
-  encryption:
-    key: !secret api_key
-
-ota:
-  - platform: esphome
-    password: !secret ota_password
+packages:
+  device: !include
+    file: esp8266/base.yaml
 
 # configuration
 remote_transmitter:
@@ -38,12 +24,6 @@ sensor:
       name: "Shed AC Humidity"
       id: humidity
     update_interval: 60s
-
-  - platform: wifi_signal
-    name: "WiFi Signal dB"
-    id: wifi_signal_db
-    update_interval: 60s
-    entity_category: "diagnostic"
 
 climate:
   - platform: coolix

@@ -1,0 +1,12 @@
+---
+esp32:
+  board: wesp32
+  framework:
+    type: esp-idf
+
+ethernet:
+  domain: .iot
+
+packages:
+  esphome-base: !include
+    file: ../esphome-common/base.yaml

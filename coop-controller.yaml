@@ -1,13 +1,12 @@
 ---
-# settings
-esphome:
-  name: coop-controller
+substitutions:
+  system_name: coop-controller
   friendly_name: "Coop Controller"
+  device_description: wESP32-based coop door controller
 
-esp32:
-  board: wesp32
-  framework:
-    type: esp-idf
+packages:
+  device: !include
+    file: esp32-ethernet/base.yaml
 
 ethernet:
   type: RTL8201
@@ -21,50 +20,38 @@ ethernet:
     - address: 0x10
       value: 0x1FFA
       page_id: 0x07
-  use_address: 192.168.2.167
-  domain: .iot
-
-logger:
-
-api:
-  encryption:
-    key: !secret api_key
-
-ota:
-  - platform: esphome
-    password: !secret ota_password
 
 # configuration
 globals:
   - id: door_position
     type: int
-    restore_value: yes
+    restore_value: true
     initial_value: "0"
 
 switch:
   - platform: gpio
     id: light_relay
     name: "Relay"
-    pin: GPIO23 # close to the other control pins, plain GPIO
+    pin: GPIO23
 
 output:
-  # EN: PWM speed/enable (LEDC on GPIO32)
+  # EN: PWM speed/enable
   - platform: ledc
     id: motor_en
-    pin: GPIO32 # PWM-capable, near 36/33
+    pin: GPIO32
     frequency: 1000 Hz
 
   # PH: direction (HIGH = open, LOW = close)
   - platform: gpio
     id: motor_dir
-    pin: GPIO33 # plain GPIO, adjacent in header cluster
+    pin: GPIO33
 
 sensor:
   # Current sense from DRV8876 CS pin (ADC1)
   - platform: adc
     id: motor_current
     name: "Motor Current"
-    pin: GPIO36 # ADC-only pin, perfect for current sense
+    pin: GPIO36
     update_interval: 100ms
     attenuation: 12db
     filters:
