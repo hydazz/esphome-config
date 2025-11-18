@@ -1,0 +1,73 @@
+---
+# settings
+substitutions:
+  name: konnected-alarm-panel
+  friendly_name: Konnected Alarm Panel
+packages:
+  konnected.alarm-panel-pro-ethernet: github://konnected-io/konnected-esphome/alarm-panel-pro-v1.8-ethernet.yaml@master
+esphome:
+  name_add_mac_suffix: false
+esp32:
+  board: wesp32
+  framework:
+    type: esp-idf
+
+# remove unused components
+web_server: !remove
+mdns: !remove
+
+ethernet:
+  use_address: 192.168.2.158
+
+logger:
+
+api:
+  encryption:
+    key: !secret api_key
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+# configuration
+sensor:
+  - id: !remove uptime_sensor
+
+binary_sensor:
+  - id: !extend zone1
+    name: Shed Motion Sensor
+    device_class: motion
+
+  - id: !extend zone2
+    name: Hall Motion Sensor
+    device_class: motion
+
+  - id: !extend zone3
+    name: Office Motion Sensor
+    device_class: motion
+
+  - id: !extend zone4
+    name: Living Room Motion Sensor
+    device_class: motion
+
+  - id: !extend zone5
+    name: Master Bedroom Motion Sensor
+    device_class: motion
+
+  - id: !remove zone6 # does not work
+
+  - id: !extend zone7
+    name: Lounge Motion Sensor
+    device_class: motion
+
+  - id: !extend zone8
+    name: Front Door Contact Sensor
+    device_class: door
+
+  - id: !extend zone9
+    name: Laundry Door Contact Sensor
+    device_class: door
+
+  - id: !remove zone10
+  - id: !remove zone11
+  - id: !remove zone12

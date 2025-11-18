@@ -1,0 +1,104 @@
+---
+# settings
+esphome:
+  name: coop-controller
+  friendly_name: "Coop Controller"
+
+esp32:
+  board: wesp32
+  framework:
+    type: esp-idf
+
+ethernet:
+  type: RTL8201
+  mdc_pin: GPIO16
+  mdio_pin: GPIO17
+  phy_addr: 0
+  clk:
+    pin: GPIO0
+    mode: CLK_EXT_IN
+  phy_registers:
+    - address: 0x10
+      value: 0x1FFA
+      page_id: 0x07
+  use_address: 192.168.2.167
+  domain: .iot
+
+logger:
+
+api:
+  encryption:
+    key: !secret api_key
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+# configuration
+globals:
+  - id: door_position
+    type: int
+    restore_value: yes
+    initial_value: "0"
+
+switch:
+  - platform: gpio
+    id: light_relay
+    name: "Relay"
+    pin: GPIO23 # close to the other control pins, plain GPIO
+
+output:
+  # EN: PWM speed/enable (LEDC on GPIO32)
+  - platform: ledc
+    id: motor_en
+    pin: GPIO32 # PWM-capable, near 36/33
+    frequency: 1000 Hz
+
+  # PH: direction (HIGH = open, LOW = close)
+  - platform: gpio
+    id: motor_dir
+    pin: GPIO33 # plain GPIO, adjacent in header cluster
+
+sensor:
+  # Current sense from DRV8876 CS pin (ADC1)
+  - platform: adc
+    id: motor_current
+    name: "Motor Current"
+    pin: GPIO36 # ADC-only pin, perfect for current sense
+    update_interval: 100ms
+    attenuation: 12db
+    filters:
+      - multiply: 1.0
+
+cover:
+  - platform: template
+    id: coop_door
+    name: "Chicken Coop Door"
+    device_class: shutter
+    optimistic: true
+    assumed_state: false
+
+    open_action:
+      - output.turn_on: motor_dir # PH = HIGH (open)
+      - output.set_level:
+          id: motor_en
+          level: 1.0 # enable motor
+      - delay: 6s # fixed movement time
+      - output.turn_off: motor_en # stop
+      - globals.set:
+          id: door_position
+          value: "100"
+
+    close_action:
+      - output.turn_off: motor_dir # PH = LOW (close)
+      - output.set_level:
+          id: motor_en
+          level: 1.0
+      - delay: 6s
+      - output.turn_off: motor_en
+      - globals.set:
+          id: door_position
+          value: "0"
+
+    stop_action:
+      - output.turn_off: motor_en # cut motor enable
