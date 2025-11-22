@@ -8,6 +8,14 @@ packages:
   device: !include
     file: esp32-ethernet/base.yaml
 
+esphome:
+  on_boot:
+    priority: 600
+    then:
+      - lambda: |-
+          id(chicken_door).position = id(stored_door_position);
+          id(chicken_door).publish_state();
+
 ethernet:
   type: RTL8201
   mdc_pin: GPIO16
@@ -21,18 +29,21 @@ ethernet:
       value: 0x1FFA
       page_id: 0x07
 
-# configuration
-globals:
-  - id: door_position
-    type: int
-    restore_value: true
-    initial_value: "0"
+logger:
+  logs:
+    sensor: INFO
 
 switch:
   - platform: gpio
     id: light_relay
     name: "Relay"
-    pin: GPIO23
+    pin: GPIO5
+
+button:
+  - platform: template
+    name: "Calibrate Door"
+    on_press:
+      - script.execute: door_calibrate
 
 output:
   # EN: PWM speed/enable
@@ -41,51 +52,309 @@ output:
     pin: GPIO32
     frequency: 1000 Hz
 
-  # PH: direction (HIGH = open, LOW = close)
+  # PH: direction (HIGH = close, LOW = open)
   - platform: gpio
     id: motor_dir
     pin: GPIO33
 
 sensor:
-  # Current sense from DRV8876 CS pin (ADC1)
+  # CS pin
   - platform: adc
     id: motor_current
     name: "Motor Current"
+    internal: true
     pin: GPIO36
-    update_interval: 100ms
+    update_interval: 10ms
     attenuation: 12db
     filters:
       - multiply: 1.0
 
+globals:
+  - id: start_time
+    type: int
+    restore_value: no
+    initial_value: "0"
+
+  - id: stored_door_position
+    type: float
+    restore_value: yes
+    initial_value: "0.0"
+
+  - id: door_open_duration
+    type: int
+    restore_value: yes
+    initial_value: "0"
+
+  - id: door_close_duration
+    type: int
+    restore_value: yes
+    initial_value: "0"
+
+  - id: target_position
+    type: float
+    restore_value: no
+    initial_value: "0.0"
+
+  - id: current_threshold_val
+    type: float
+    restore_value: yes
+    initial_value: "0.75"
+
+number:
+  - platform: template
+    name: "Door Open Duration"
+    id: num_door_open_duration
+    unit_of_measurement: "ms"
+    min_value: 0
+    max_value: 20000
+    step: 100
+    lambda: return id(door_open_duration);
+    set_action:
+      - lambda: id(door_open_duration) = x;
+
+  - platform: template
+    name: "Door Close Duration"
+    id: num_door_close_duration
+    unit_of_measurement: "ms"
+    min_value: 0
+    max_value: 20000
+    step: 100
+    lambda: return id(door_close_duration);
+    set_action:
+      - lambda: id(door_close_duration) = x;
+
+  - platform: template
+    name: "Motor Current Threshold"
+    id: motor_current_threshold
+    unit_of_measurement: "V"
+    min_value: 0.1
+    max_value: 3.0
+    step: 0.05
+    lambda: return id(current_threshold_val);
+    set_action:
+      - lambda: id(current_threshold_val) = x;
+
 cover:
   - platform: template
-    id: coop_door
-    name: "Chicken Coop Door"
-    device_class: shutter
-    optimistic: true
-    assumed_state: false
-
+    name: "Chicken Door"
+    id: chicken_door
+    device_class: door
+    has_position: true
     open_action:
-      - output.turn_on: motor_dir # PH = HIGH (open)
-      - output.set_level:
-          id: motor_en
-          level: 1.0 # enable motor
-      - delay: 6s # fixed movement time
-      - output.turn_off: motor_en # stop
-      - globals.set:
-          id: door_position
-          value: "100"
-
+      - lambda: |-
+          if (id(chicken_door).position >= 0.99) {
+             ESP_LOGW("coop", "Door already open.");
+             return;
+          }
+          id(target_position) = 1.0;
+      - script.execute: door_open
     close_action:
-      - output.turn_off: motor_dir # PH = LOW (close)
+      - lambda: |-
+          if (id(chicken_door).position <= 0.01) {
+             ESP_LOGW("coop", "Door already closed.");
+             return;
+          }
+          id(target_position) = 0.0;
+      - script.execute: door_close
+    stop_action:
+      - script.stop: door_open
+      - script.stop: door_close
+      - output.turn_off: motor_en
+    position_action:
+      - lambda: |-
+          id(target_position) = pos;
+          if (pos == id(chicken_door).position) {
+            // Already there
+          } else if (pos > id(chicken_door).position) {
+            id(door_open).execute();
+          } else {
+            id(door_close).execute();
+          }
+
+script:
+  - id: door_calibrate
+    then:
+      - logger.log: "Starting Calibration..."
+      # 1. Home Open (Get to known state)
+      - logger.log: "Homing (Opening)..."
+      - output.turn_off: motor_dir
       - output.set_level:
           id: motor_en
-          level: 1.0
-      - delay: 6s
+          level: 100%
+      - delay: 200ms
+      - wait_until:
+          condition:
+            lambda: return id(motor_current).state > id(current_threshold_val);
+          timeout: 60s
       - output.turn_off: motor_en
-      - globals.set:
-          id: door_position
-          value: "0"
+      - delay: 1s
+      - lambda: |-
+          id(chicken_door).position = 1.0;
+          id(stored_door_position) = 1.0;
+          id(chicken_door).publish_state();
 
-    stop_action:
-      - output.turn_off: motor_en # cut motor enable
+      # 2. Measure Close
+      - logger.log: "Measuring Close Duration..."
+      - lambda: id(start_time) = millis();
+      - output.turn_on: motor_dir
+      - output.set_level:
+          id: motor_en
+          level: 100%
+      - delay: 200ms
+      - wait_until:
+          condition:
+            lambda: return id(motor_current).state > id(current_threshold_val);
+          timeout: 60s
+      - output.turn_off: motor_en
+      - lambda: |-
+          int duration = millis() - id(start_time);
+          ESP_LOGI("coop", "Calibrated Close Duration: %d ms", duration);
+          id(door_close_duration) = duration;
+          id(chicken_door).position = 0.0;
+          id(stored_door_position) = 0.0;
+          id(chicken_door).publish_state();
+      - delay: 1s
+
+      # 3. Measure Open
+      - logger.log: "Measuring Open Duration..."
+      - lambda: id(start_time) = millis();
+      - output.turn_off: motor_dir
+      - output.set_level:
+          id: motor_en
+          level: 100%
+      - delay: 200ms
+      - wait_until:
+          condition:
+            lambda: return id(motor_current).state > id(current_threshold_val);
+          timeout: 60s
+      - output.turn_off: motor_en
+      - lambda: |-
+          int duration = millis() - id(start_time);
+          ESP_LOGI("coop", "Calibrated Open Duration: %d ms", duration);
+          id(door_open_duration) = duration;
+          id(chicken_door).position = 1.0;
+          id(stored_door_position) = 1.0;
+          id(chicken_door).publish_state();
+      - logger.log: "Calibration Complete."
+
+  - id: door_open
+    then:
+      - lambda: id(start_time) = millis();
+      - cover.template.publish:
+          id: chicken_door
+          current_operation: OPENING
+      - output.turn_off: motor_dir
+      - output.set_level:
+          id: motor_en
+          level: 100%
+      - delay: 200ms
+      - wait_until:
+          condition:
+            or:
+              - lambda: return id(motor_current).state > id(current_threshold_val);
+              - lambda: |-
+                  int full_duration = id(door_open_duration);
+                  if (full_duration == 0) return false;
+                  int elapsed = millis() - id(start_time);
+                  return elapsed >= (full_duration * 1.05);
+          timeout: 60s
+      - output.turn_off: motor_en
+      - lambda: |-
+          int duration = millis() - id(start_time);
+          int full_duration = id(door_open_duration);
+          bool hit_current = id(motor_current).state > id(current_threshold_val);
+
+          float new_pos = id(chicken_door).position;
+
+          if (hit_current) {
+             if (full_duration == 0 || duration > (full_duration * 0.95)) {
+                ESP_LOGI("coop", "Door Open Endstop. Updating duration.");
+                id(door_open_duration) = duration;
+                new_pos = 1.0;
+             } else {
+                ESP_LOGW("coop", "Door jammed opening at %d ms", duration);
+             }
+          } else {
+             ESP_LOGI("coop", "Door Open Timeout (105%). Assuming Open.");
+             new_pos = 1.0;
+          }
+
+          id(chicken_door).position = new_pos;
+          id(stored_door_position) = new_pos;
+          id(chicken_door).current_operation = CoverOperation::COVER_OPERATION_IDLE;
+          id(chicken_door).publish_state();
+
+  - id: door_close
+    then:
+      - lambda: id(start_time) = millis();
+      - cover.template.publish:
+          id: chicken_door
+          current_operation: CLOSING
+      - output.turn_on: motor_dir
+      - output.set_level:
+          id: motor_en
+          level: 100%
+      - delay: 200ms
+      - wait_until:
+          condition:
+            or:
+              - lambda: return id(motor_current).state > id(current_threshold_val);
+              - lambda: |-
+                  int full_duration = id(door_close_duration);
+                  if (full_duration == 0) return false;
+                  int elapsed = millis() - id(start_time);
+                  return elapsed >= (full_duration * 1.05);
+          timeout: 60s
+      - output.turn_off: motor_en
+      - lambda: |-
+          int duration = millis() - id(start_time);
+          int full_duration = id(door_close_duration);
+          bool hit_current = id(motor_current).state > id(current_threshold_val);
+
+          float new_pos = id(chicken_door).position;
+
+          if (hit_current) {
+             if (full_duration == 0 || duration > (full_duration * 0.95)) {
+                ESP_LOGI("coop", "Door Close Endstop. Updating duration.");
+                id(door_close_duration) = duration;
+                new_pos = 0.0;
+             } else {
+                ESP_LOGW("coop", "Door jammed closing at %d ms", duration);
+             }
+          } else {
+             ESP_LOGI("coop", "Door Close Timeout (105%). Assuming Closed.");
+             new_pos = 0.0;
+          }
+
+          id(chicken_door).position = new_pos;
+          id(stored_door_position) = new_pos;
+          id(chicken_door).current_operation = CoverOperation::COVER_OPERATION_IDLE;
+          id(chicken_door).publish_state();
+
+interval:
+  - interval: 500ms
+    then:
+      - lambda: |-
+          if (id(chicken_door).current_operation == CoverOperation::COVER_OPERATION_IDLE) return;
+
+          int duration = millis() - id(start_time);
+          float start_pos = id(stored_door_position);
+          float new_pos = start_pos;
+
+          if (id(chicken_door).current_operation == CoverOperation::COVER_OPERATION_OPENING) {
+            int full_duration = id(door_open_duration);
+            if (full_duration > 0) {
+              new_pos = start_pos + ((float)duration / (float)full_duration);
+            }
+          } else {
+            int full_duration = id(door_close_duration);
+            if (full_duration > 0) {
+              new_pos = start_pos - ((float)duration / (float)full_duration);
+            }
+          }
+
+          if (new_pos > 1.0) new_pos = 1.0;
+          if (new_pos < 0.0) new_pos = 0.0;
+
+          id(chicken_door).position = new_pos;
+          id(chicken_door).publish_state();
