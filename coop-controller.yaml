@@ -40,7 +40,7 @@ switch:
     id: light_relay
     name: "Relay"
     pin:
-      number: GPIO5
+      number: GPIO69
       ignore_strapping_warning: true
 
 button:
