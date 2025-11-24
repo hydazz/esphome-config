@@ -22,7 +22,9 @@ ethernet:
   mdio_pin: GPIO17
   phy_addr: 0
   clk:
-    pin: GPIO0
+    pin:
+      number: GPIO0
+      ignore_strapping_warning: true
     mode: CLK_EXT_IN
   phy_registers:
     - address: 0x10
@@ -37,7 +39,9 @@ switch:
   - platform: gpio
     id: light_relay
     name: "Relay"
-    pin: GPIO5
+    pin:
+      number: GPIO5
+      ignore_strapping_warning: true
 
 button:
   - platform: template
