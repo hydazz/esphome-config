@@ -1,7 +1,7 @@
 ---
 substitutions:
   system_name: coop-controller
-  friendly_name: "Coop Controller"
+  friendly_name: Coop Controller
   device_description: wESP32-based coop door controller
 
 packages:

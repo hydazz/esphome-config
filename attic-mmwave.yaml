@@ -1,0 +1,15 @@
+---
+substitutions:
+  system_name: attic-mmwave
+  friendly_name: Attic MMWave
+  device_description: Test
+
+packages:
+  device: !include
+    file: esp32/base.yaml
+  ld2450_base: github://EverythingSmartHome/everything-presence-lite/common/ld2450-base.yaml@main
+
+esphome:
+  project: # Spoof needed to use everythingsmarthome/everything-presence-mmwave-configurator
+    name: EverythingSmartTechnology.Everything Presence Lite
+    version: "1.4.1"

@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   list-configs:
-    name: Discover changed ESPHome configs
+    name: Get Changed Configs Summary
     runs-on: ubuntu-latest
     outputs:
       configs: ${{ steps.collect.outputs.configs }}
@@ -111,25 +111,23 @@ jobs:
             let summaryText = '';
 
             if (configs.length === 0) {
-              summaryText += '## 🔍 ESPHome Configuration Validation\n\n';
-              summaryText += '### ℹ️ No ESPHome configs to validate\n\n';
+              summaryText += 'No ESPHome configs to validate\n\n';
               if (changedFiles.length > 0) {
-                summaryText += `**Changed files:** ${changedFiles.length}\n`;
-                summaryText += `**ESPHome configs:** 0\n\n`;
+                summaryText += `Changed files: ${changedFiles.length}\n`;
+                summaryText += `ESPHome configs: 0\n\n`;
               }
             } else {
-              const configList = configs.map(config => `- **${config.friendly_name}** (\`${config.file}\`)`);
-
-              summaryText += '## 🔍 ESPHome Configuration Validation\n\n';
-              summaryText += '### 📋 Configs to validate:\n\n';
-              summaryText += configList.join('\n') + '\n\n';
-              summaryText += `**Total configs:** ${configs.length}\n\n`;
+              summaryText += 'Configs to test:\n';
+              configs.forEach(config => {
+                summaryText += `- ${config.friendly_name} ('${config.file}')\n`;
+              });
+              summaryText += '\n';
             }
 
             if (skippedFiles.length > 0) {
-              summaryText += '### ⚠️ Skipped files (not ESPHome configs):\n\n';
+              summaryText += 'Skipped files (not ESPHome configs):\n';
               skippedFiles.forEach(file => {
-                summaryText += `- \`${file}\` (no friendly_name found)\n`;
+                summaryText += `- ${file} (no friendly_name found)\n`;
                 core.warning(`File ${file} appears to be a YAML file but doesn't contain a friendly_name - skipping validation`);
               });
               summaryText += '\n';
@@ -174,27 +172,6 @@ jobs:
           set -o pipefail
           esphome config "${{ matrix.config.file }}" 2>&1 | tee esphome.log
 
-      - name: Save resolved config
-        if: success()
-        run: |
-          esphome config "${{ matrix.config.file }}" > resolved-config.txt
-
-      - name: Upload log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: esphome-log-${{ matrix.config.friendly_name }}
-          path: esphome.log
-          if-no-files-found: ignore
-
-      - name: Upload resolved config
-        if: success()
-        uses: actions/upload-artifact@v4
-        with:
-          name: esphome-config-${{ matrix.config.friendly_name }}
-          path: resolved-config.txt
-          if-no-files-found: ignore
-
       - name: Add result to summary
         if: always()
         uses: actions/github-script@v7
@@ -204,38 +181,15 @@ jobs:
           JOB_STATUS: ${{ job.status }}
         with:
           script: |-
-            const fs = require('fs');
             const {
               CONFIG_NAME,
               CONFIG_FILE,
               JOB_STATUS,
-              GITHUB_SERVER_URL,
-              GITHUB_REPOSITORY,
-              GITHUB_RUN_ID,
             } = process.env;
 
             const ok = JOB_STATUS === 'success';
             const icon = ok ? '✅' : '❌';
 
             let summary = `${icon} ${CONFIG_NAME} (\`${CONFIG_FILE}\`) - ${JOB_STATUS}\n\n`;
-
-            if (!ok) {
-              try {
-                const lines = fs.readFileSync('esphome.log', 'utf8').split('\n');
-                const tail = lines.slice(-40).join('\n');
-                summary += 'Last lines of log:\n\n';
-                summary += '```text\n' + tail + '\n```\n\n';
-              } catch (err) {
-                core.warning(`Could not read esphome.log: ${err.message}`);
-              }
-            }
-
-            const runUrl = `${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}`;
-            summary += `[View full logs for this run](${runUrl})\n\n`;
-            summary += `Artifacts:\n`;
-            summary += `- \`esphome-log-${CONFIG_NAME}\` (full log)\n`;
-            if (ok) {
-              summary += `- \`esphome-config-${CONFIG_NAME}\` (resolved/validated config)\n`;
-            }
 
             core.summary.addRaw(summary).write();
