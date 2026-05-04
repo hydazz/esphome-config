@@ -1,195 +1,280 @@
 ---
-name: Validate
+name: Validate ESPHome
 
 on:
   push:
-  pull_request:
     branches:
       - main
+    paths:
+      - "**/*.yaml"
+      - "**/*.yml"
+
+  workflow_dispatch:
 
 concurrency:
-  group: ${{ github.ref }}-${{ github.workflow }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
-  list-configs:
-    name: Get Changed Configs Summary
+  discover:
+    name: Discover ESPHome configs
     runs-on: ubuntu-latest
+
     outputs:
-      configs: ${{ steps.collect.outputs.configs }}
+      configs: ${{ steps.configs.outputs.configs }}
+      count: ${{ steps.configs.outputs.count }}
+
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Get changed files
-        id: changed-files
-        uses: bjw-s-labs/action-changed-files@1a5aeab1bfa64d0c4e786f501d5a3f1fad4a24da # v0.4.1
+        uses: actions/checkout@v5
         with:
-          patterns: |-
-            **/*.yaml
-            **/*.yml
+          fetch-depth: 0
 
-      - name: Collect config files
-        id: collect
+      - name: Find configs to validate
+        id: configs
+        shell: bash
         env:
-          CHANGED_FILES: ${{ steps.changed-files.outputs.changed_files }}
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE_SHA: ${{ github.event.before }}
+          CURRENT_SHA: ${{ github.sha }}
         run: |
           python <<'PY'
           import json
           import os
+          import re
+          import subprocess
           from pathlib import Path
 
-          changed_files_str = os.environ.get("CHANGED_FILES", "[]")
-          try:
-              changed_files = json.loads(changed_files_str)
-          except json.JSONDecodeError:
-              changed_files = []
+          def git(*args: str) -> str:
+              return subprocess.check_output(["git", *args], text=True).strip()
 
-          if not isinstance(changed_files, list):
-              changed_files = []
+          def yaml_files(files: list[str]) -> list[str]:
+              ignored = {
+                  "secrets.yaml",
+                  "secrets.yml",
+              }
 
-          def first_friendly_name(path_str: str) -> str | None:
-            try:
-                path = Path(path_str)
-                if not path.exists():
-                    return None
-                with path.open("r", encoding="utf-8", errors="ignore") as f:
-                  for raw in f:
-                    line = raw.strip()
-                    if not line or line.startswith("#"):
+              result = []
+
+              for file in files:
+                  path = Path(file)
+
+                  if path.suffix.lower() not in {".yaml", ".yml"}:
                       continue
-                    if line.startswith("friendly_name:"):
-                      value = line.split(":", 1)[1].strip()
-                      if (value.startswith('"') and value.endswith('"')) or (
-                        value.startswith("'") and value.endswith("'")
+
+                  if path.name in ignored:
+                      continue
+
+                  if path.parts and path.parts[0] == ".github":
+                      continue
+
+                  if not path.exists() or not path.is_file():
+                      continue
+
+                  result.append(file)
+
+              return sorted(set(result))
+
+          def changed_files() -> list[str]:
+              if os.environ["EVENT_NAME"] == "workflow_dispatch":
+                  return yaml_files(git("ls-files").splitlines())
+
+              before = os.environ.get("BEFORE_SHA", "")
+              current = os.environ["CURRENT_SHA"]
+
+              if not before or re.fullmatch(r"0+", before):
+                  files = git("ls-files").splitlines()
+                  return yaml_files(files)
+
+              files = git(
+                  "diff",
+                  "--name-only",
+                  "--diff-filter=ACMRT",
+                  before,
+                  current,
+              ).splitlines()
+
+              return yaml_files(files)
+
+          def friendly_name(file: str) -> str | None:
+              path = Path(file)
+
+              try:
+                  for raw in path.read_text(encoding="utf-8", errors="ignore").splitlines():
+                      line = raw.strip()
+
+                      if not line or line.startswith("#"):
+                          continue
+
+                      match = re.match(r"^\s*friendly_name\s*:\s*(.+?)\s*(?:#.*)?$", raw)
+
+                      if not match:
+                          continue
+
+                      value = match.group(1).strip()
+
+                      if value in {"", "|", ">"}:
+                          return None
+
+                      if (
+                          len(value) >= 2
+                          and value[0] == value[-1]
+                          and value[0] in {"'", '"'}
                       ):
-                        value = value[1:-1].strip()
+                          value = value[1:-1].strip()
+
                       return value or None
-            except Exception:
-                pass
-            return None
+
+              except OSError:
+                  return None
+
+              return None
 
           configs = []
+          skipped = []
 
-          for f in changed_files:
-            friendly_name = first_friendly_name(f)
-            if not friendly_name:
-              continue
+          for file in changed_files():
+              name = friendly_name(file)
 
-            configs.append(
-              {
-                "file": f,
-                "friendly_name": friendly_name,
-              }
-            )
+              if not name:
+                  skipped.append(file)
+                  continue
 
-          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
-            fh.write(f"configs={json.dumps(configs)}\n")
+              slug = re.sub(r"[^A-Za-z0-9_.-]+", "-", file).strip("-")
+
+              configs.append({
+                  "file": file,
+                  "friendly_name": name,
+                  "slug": slug,
+              })
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"configs={json.dumps(configs, separators=(',', ':'))}\n")
+              output.write(f"count={len(configs)}\n")
+
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
+              summary.write("## ESPHome configs\n\n")
+
+              if configs:
+                  summary.write("| Device | Config |\n")
+                  summary.write("| --- | --- |\n")
+
+                  for config in configs:
+                      summary.write(f"| {config['friendly_name']} | `{config['file']}` |\n")
+
+                  summary.write("\n")
+              else:
+                  summary.write("No changed ESPHome configs found.\n\n")
+
+              if skipped:
+                  summary.write("<details>\n")
+                  summary.write("<summary>Skipped YAML files</summary>\n\n")
+
+                  for file in skipped:
+                      summary.write(f"- `{file}`: no `friendly_name` found\n")
+
+                  summary.write("\n</details>\n")
+
+          for file in skipped:
+              print(f"::notice file={file}::Skipped YAML file with no friendly_name")
           PY
 
-      - name: Generate Summary
-        uses: actions/github-script@v7
-        env:
-          CONFIGS: ${{ steps.collect.outputs.configs }}
-          CHANGED_FILES: ${{ steps.changed-files.outputs.changed_files }}
-        with:
-          script: |
-            const configs = JSON.parse(process.env.CONFIGS || '[]');
-            const changedFiles = JSON.parse(process.env.CHANGED_FILES || '[]');
-
-            // Find files that were changed but don't have friendly_name (not ESPHome configs)
-            const skippedFiles = changedFiles.filter(file =>
-              !configs.some(config => config.file === file) &&
-              (file.endsWith('.yaml') || file.endsWith('.yml')) &&
-              !file.includes('secrets.yaml') &&
-              !file.includes('.github/')
-            );
-
-            let summaryText = '';
-
-            if (configs.length === 0) {
-              summaryText += 'No ESPHome configs to validate\n\n';
-              if (changedFiles.length > 0) {
-                summaryText += `Changed files: ${changedFiles.length}\n`;
-                summaryText += `ESPHome configs: 0\n\n`;
-              }
-            } else {
-              summaryText += 'Configs to test:\n';
-              configs.forEach(config => {
-                summaryText += `- ${config.friendly_name} ('${config.file}')\n`;
-              });
-              summaryText += '\n';
-            }
-
-            if (skippedFiles.length > 0) {
-              summaryText += 'Skipped files (not ESPHome configs):\n';
-              skippedFiles.forEach(file => {
-                summaryText += `- ${file} (no friendly_name found)\n`;
-                core.warning(`File ${file} appears to be a YAML file but doesn't contain a friendly_name - skipping validation`);
-              });
-              summaryText += '\n';
-            }
-
-            core.summary.addRaw(summaryText).write();
-
   validate:
-    name: Validate ESPHome configs
+    name: Validate ${{ matrix.friendly_name }}
     runs-on: ubuntu-latest
-    needs: list-configs
-    if: needs.list-configs.outputs.configs != '[]'
+    needs:
+      - discover
+
+    if: needs.discover.outputs.count != '0'
+
     strategy:
       fail-fast: false
       matrix:
-        config: ${{ fromJson(needs.list-configs.outputs.configs) }}
+        include: ${{ fromJSON(needs.discover.outputs.configs) }}
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.13"
+          cache: pip
 
       - name: Install ESPHome
-        run: pip install esphome
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install esphome
 
-      - name: Provide stub secrets.yaml
+      - name: Provide CI secrets
+        shell: bash
         run: |
           cat > secrets.yaml <<'EOF'
           wifi_ssid: "dummy-ssid"
           wifi_password: "dummy-password"
           api_key: "NTaJhzu9F3FQQW/TBqjSkr50euZwR/Po6Op50tmceiw="
+          api_encryption_key: "NTaJhzu9F3FQQW/TBqjSkr50euZwR/Po6Op50tmceiw="
           ota_password: "dummy-ota-password"
+          fallback_ap_password: "dummy-fallback-password"
+          mqtt_username: "dummy-mqtt-user"
+          mqtt_password: "dummy-mqtt-password"
           EOF
 
       - name: Validate config
         id: validate
-        run: |
-          set -o pipefail
-          esphome config "${{ matrix.config.file }}" 2>&1 | tee esphome.log
-
-      - name: Add result to summary
-        if: always()
-        uses: actions/github-script@v7
+        shell: bash
         env:
-          CONFIG_NAME: ${{ matrix.config.friendly_name }}
-          CONFIG_FILE: ${{ matrix.config.file }}
+          CONFIG_FILE: ${{ matrix.file }}
+          CONFIG_SLUG: ${{ matrix.slug }}
+        run: |
+          mkdir -p logs
+
+          echo "::group::esphome config ${CONFIG_FILE}"
+
+          set +e
+          set -o pipefail
+          esphome config "${CONFIG_FILE}" 2>&1 | tee "logs/${CONFIG_SLUG}.log"
+          status="${PIPESTATUS[0]}"
+          set -e
+
+          echo "::endgroup::"
+
+          exit "${status}"
+
+      - name: Write summary
+        if: always()
+        shell: bash
+        env:
+          CONFIG_NAME: ${{ matrix.friendly_name }}
+          CONFIG_FILE: ${{ matrix.file }}
+          CONFIG_SLUG: ${{ matrix.slug }}
           JOB_STATUS: ${{ job.status }}
-        with:
-          script: |-
-            const {
-              CONFIG_NAME,
-              CONFIG_FILE,
-              JOB_STATUS,
-            } = process.env;
+        run: |-
+          {
+            if [[ "${JOB_STATUS}" == "success" ]]; then
+              echo "## ✅ ${CONFIG_NAME}"
+            else
+              echo "## ❌ ${CONFIG_NAME}"
+            fi
 
-            const ok = JOB_STATUS === 'success';
-            const icon = ok ? '✅' : '❌';
+            echo
+            echo "- Config: \`${CONFIG_FILE}\`"
+            echo "- Result: \`${JOB_STATUS}\`"
+            echo
 
-            let summary = `${icon} ${CONFIG_NAME} (\`${CONFIG_FILE}\`) - ${JOB_STATUS}\n\n`;
-
-            core.summary.addRaw(summary).write();
+            if [[ -f "logs/${CONFIG_SLUG}.log" ]]; then
+              echo "<details>"
+              echo "<summary>ESPHome output</summary>"
+              echo
+              echo '```text'
+              tail -n 200 "logs/${CONFIG_SLUG}.log"
+              echo '```'
+              echo
+              echo "</details>"
+            fi
+          } >> "${GITHUB_STEP_SUMMARY}"
