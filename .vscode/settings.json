@@ -1,5 +1,6 @@
 {
   "files.associations": {
-    "*.yaml": "esphome"
+    "*.yaml": "esphome",
+    "**/.github/**/*.yaml": "yaml"
   }
 }
