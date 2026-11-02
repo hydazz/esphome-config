@@ -1,5 +1,3 @@
 {
-  "recommendations": [
-    "esphome.esphome-vscode"
-  ]
+  "recommendations": ["esphome.esphome-vscode"]
 }
