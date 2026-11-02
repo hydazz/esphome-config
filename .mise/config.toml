@@ -10,10 +10,9 @@ node = "26.13.0"
 experimental = true
 pin = true
 lockfile = true
-python.uv_venv_auto = "create|source"
 
 [env]
-UV_PYTHON = { value = "{{ tools.python.path }}", tools = true }
+UV_PYTHON = "python"
 
 [tasks.lint]
 description = "Validate devices and generate source without compiling"
