@@ -4,10 +4,10 @@
   customManagers: [
     {
       customType: "regex",
-      description: "ESPHome GitHub package pins",
+      description: "ESPHome GitHub package and component pins",
       managerFilePatterns: ["/\\.ya?ml$/"],
       matchStrings: [
-        "github://(?<depName>[^/\\s]+/[^/\\s]+)/[^@\\s]+@(?<currentDigest>[a-f0-9]{40})",
+        "github://(?<depName>[^/\\s@]+/[^/\\s@]+)(?:/[^@\\s]+)?@(?<currentDigest>[a-f0-9]{40})",
       ],
       datasourceTemplate: "git-refs",
       packageNameTemplate: "https://github.com/{{{depName}}}",
