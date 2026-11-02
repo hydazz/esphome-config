@@ -6,6 +6,8 @@ substitutions:
 
 esp8266:
   restore_from_flash: true
+  # Avoid pulsing the active-low relay before switch setup.
+  early_pin_init: false
 
 packages:
   device: !include

@@ -4,6 +4,12 @@ substitutions:
   friendly_name: Coop Controller
   device_description: wESP32-based coop door controller
 
+esp32:
+  framework:
+    advanced:
+      flash_chip: gd
+      sram1_as_iram: true
+
 packages:
   device: !include
     file: esp32-ethernet/base.yaml
@@ -279,7 +285,7 @@ script:
                 ESP_LOGW("coop", "Door jammed opening at %d ms", duration);
              }
           } else {
-             ESP_LOGI("coop", "Door Open Timeout (105%). Assuming Open.");
+             ESP_LOGI("coop", "Door Open Timeout (105%%). Assuming Open.");
              new_pos = 1.0;
           }
 
@@ -326,7 +332,7 @@ script:
                 ESP_LOGW("coop", "Door jammed closing at %d ms", duration);
              }
           } else {
-             ESP_LOGI("coop", "Door Close Timeout (105%). Assuming Closed.");
+             ESP_LOGI("coop", "Door Close Timeout (105%%). Assuming Closed.");
              new_pos = 0.0;
           }
 

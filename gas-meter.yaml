@@ -8,11 +8,23 @@ substitutions:
   i2c_sda: "GPIO19"
   hide_magnetic_field_strength_sensors: "true"
   hide_half_rotations_total_sensor: "true"
+  qmc5883l_update_interval: 20ms
+
+esp32:
+  framework:
+    advanced:
+      flash_chip: generic
+      sram1_as_iram: true
 
 packages:
   device: !include
     file: esp32/base.yaml
   meter: github://tronikos/esphome-magnetometer-water-gas-meter/esphome-gas-meter.yaml@17d7ee9a1da952c4648fdf698533f78a31aeca48
+
+switch:
+  - id: !extend led
+    pin:
+      ignore_strapping_warning: true
 
 wifi:
   # Apparent OOP (out of power) when unset, cfb fixing
