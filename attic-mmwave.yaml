@@ -7,7 +7,7 @@ substitutions:
 packages:
   device: !include
     file: esp32/base.yaml
-  ld2450_base: github://EverythingSmartHome/everything-presence-lite/common/ld2450-base.yaml@main
+  ld2450_base: github://EverythingSmartHome/everything-presence-lite/common/ld2450-base.yaml@df04e162c84fa9271fc9241e59368e895e539743
 
 esphome:
   project: # Spoof needed to use everythingsmarthome/everything-presence-mmwave-configurator
