@@ -1,7 +1,6 @@
-lost+found
-.code-server/
-.ash_history
-.esphome/
-
-#ESPHome ignores
+.DS_Store
+/.venv/
+/.esphome/
 /secrets.yaml
+/.mise/config.local.toml
+/.mise/mise.local.lock

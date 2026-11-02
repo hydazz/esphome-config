@@ -1,0 +1,44 @@
+---
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  MISE_NO_HOOKS: "1"
+  MISE_TASK_RUN_AUTO_INSTALL: "false"
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Mise
+        uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # v5.2.4
+        with:
+          experimental: true
+          install_args: --locked python uv
+
+      - name: Provide dummy secrets
+        run: cp .github/secrets.example.yaml secrets.yaml
+
+      - name: Check device configurations and code generation
+        run: mise run lint

@@ -8,7 +8,7 @@ substitutions:
 packages:
   device: !include
     file: esp32-ethernet/base.yaml
-  konnected.alarm-panel-pro-ethernet: github://konnected-io/konnected-esphome/alarm-panel-pro-v1.8-ethernet.yaml@master
+  konnected.alarm-panel-pro-ethernet: github://konnected-io/konnected-esphome/alarm-panel-pro-v1.8-ethernet.yaml@b9bc41e7b42ca3825a18ef3657365d8a6d64cb3c
 
 esphome:
   name_add_mac_suffix: false
