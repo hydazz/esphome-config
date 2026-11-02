@@ -6,25 +6,58 @@ on:
   push:
     branches:
       - main
+    paths-ignore:
+      - "**.md"
   pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
+
+defaults:
+  run:
+    shell: bash
 
 env:
   MISE_NO_HOOKS: "1"
   MISE_TASK_RUN_AUTO_INSTALL: "false"
 
 jobs:
-  lint:
-    name: Lint
+  workflow-lint:
+    name: Workflow Lint
     runs-on: ubuntu-26.04
     timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Mise
+        uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # v5.2.4
+        with:
+          experimental: true
+          install_args: --locked aqua:jdx/jactionlint
+
+      - name: Lint workflows
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: jactionlint --online --shellcheck= --format github
+
+  devices:
+    name: Devices
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -42,3 +75,21 @@ jobs:
 
       - name: Check device configurations and code generation
         run: mise run lint
+
+  status:
+    if: ${{ !cancelled() }}
+    name: Build Success
+    needs:
+      - devices
+      - workflow-lint
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    permissions: {}
+    steps:
+      - name: Any jobs failed?
+        if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
+        run: exit 1
+
+      - name: All jobs passed or skipped?
+        if: ${{ !(contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')) }}
+        run: echo "All jobs passed or skipped" && echo "${{ toJSON(needs.*.result) }}"
