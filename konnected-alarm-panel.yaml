@@ -16,7 +16,7 @@ esp32:
 packages:
   device: !include
     file: esp32-ethernet/base.yaml
-  konnected.alarm-panel-pro-ethernet: github://konnected-io/konnected-esphome/alarm-panel-pro-v1.8-ethernet.yaml@b9bc41e7b42ca3825a18ef3657365d8a6d64cb3c
+  konnected.alarm-panel-pro-ethernet: github://konnected-io/konnected-esphome/alarm-panel-pro-v1.8-ethernet.yaml@665990de82ce160c1c41456470c29aab1234e96b
 
 esphome:
   name_add_mac_suffix: false
