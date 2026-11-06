@@ -15,11 +15,9 @@ lockfile = true
 UV_PYTHON = "python"
 
 [tasks.format]
-description = "Format repository files"
 run = ["mise fmt", "oxfmt ."]
 
 [tasks.deps]
-description = "Install locked Python dependencies"
 run = "uv sync --locked"
 
 [tasks.lint]
