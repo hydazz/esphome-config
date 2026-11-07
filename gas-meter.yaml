@@ -19,7 +19,7 @@ esp32:
 packages:
   device: !include
     file: esp32/base.yaml
-  meter: github://tronikos/esphome-magnetometer-water-gas-meter/esphome-gas-meter.yaml@95ce0a8f21df5c264c5ad28e74fb6b282c5cce55
+  meter: github://tronikos/esphome-magnetometer-water-gas-meter/esphome-gas-meter.yaml@487f13c57ecf74e819a8fb9cb7fb4297c6cb53fe
 
 switch:
   - id: !extend led
