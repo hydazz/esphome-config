@@ -1,0 +1,33 @@
+---
+switch:
+  - platform: modbus_controller
+    modbus_controller_id: hws_controller
+    name: Heat Pump Power
+    register_type: holding
+    address: 1011
+    bitmask: 0x0001
+    use_write_multiple: true
+    restore_mode: DISABLED
+
+  - platform: modbus_controller
+    modbus_controller_id: hws_controller
+    name: Electric Boost
+    register_type: holding
+    address: 1014
+    bitmask: 0x0001
+    restore_mode: DISABLED
+    # 1 requests a one-shot boost; 2 cancels it; 0 means completed.
+    write_lambda: |-
+      const std::array<uint16_t, 1> values{static_cast<uint16_t>(x ? 1 : 2)};
+      item->write_multiple_registers(item->write_address(), values);
+      return {};
+
+  - platform: modbus_controller
+    modbus_controller_id: hws_controller
+    name: Internal Timers
+    register_type: holding
+    address: 1133
+    bitmask: 0x000F
+    use_write_multiple: true
+    restore_mode: DISABLED
+    entity_category: config

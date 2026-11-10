@@ -1,0 +1,184 @@
+---
+substitutions:
+  system_name: water-heater
+  friendly_name: Water Heater
+  device_description: iStore 270L R290 via AtomS3 Lite and Atomic RS485 Base
+
+esp32:
+  board: m5stack-atoms3
+  framework:
+    advanced:
+      flash_chip: gd
+
+packages:
+  device: !include
+    file: esp32/base.yaml
+  controls: !include water-heater/controls.yaml
+
+uart:
+  id: rs485_uart
+  tx_pin: GPIO6
+  rx_pin: GPIO5
+  baud_rate: 9600
+  data_bits: 8
+  parity: NONE
+  stop_bits: 1
+
+modbus:
+  id: hws_modbus
+  uart_id: rs485_uart
+  # Leave room for the controller's periodic traffic.
+  send_wait_time: 250ms
+  turnaround_time: 100ms
+
+modbus_controller:
+  - id: hws_controller
+    modbus_id: hws_modbus
+    address: 99
+    update_interval: 30s
+
+# DTU/Wi-Fi map: https://github.com/echopin664/EVO270-1-HWS
+sensor:
+  - <<: &temperature
+      platform: modbus_controller
+      modbus_controller_id: hws_controller
+      register_type: holding
+      value_type: U_WORD
+      unit_of_measurement: "°C"
+      device_class: temperature
+      state_class: measurement
+      accuracy_decimals: 1
+      filters:
+        - multiply: 0.5
+        - offset: -30
+        - timeout: 90s
+    name: Ambient Temperature
+    address: 2019
+
+  - <<: *temperature
+    name: Bottom Tank Temperature
+    address: 2020
+
+  - <<: *temperature
+    name: Top Tank Temperature
+    address: 2021
+
+  - <<: *temperature
+    name: Coil Temperature
+    address: 2022
+
+  - <<: *temperature
+    name: Suction Temperature
+    address: 2023
+    entity_category: diagnostic
+
+  - <<: *temperature
+    name: Display Temperature
+    address: 2025
+
+  - <<: *temperature
+    name: Target Temperature
+    address: 1104
+
+  - <<: &run_time
+      platform: modbus_controller
+      modbus_controller_id: hws_controller
+      register_type: holding
+      value_type: U_WORD
+      unit_of_measurement: h
+      device_class: duration
+      accuracy_decimals: 0
+      entity_category: diagnostic
+    name: Compressor Run Time
+    address: 2061
+
+  - <<: *run_time
+    name: Electric Heater Run Time
+    address: 2062
+
+  - platform: modbus_controller
+    modbus_controller_id: hws_controller
+    name: Internal Timer Flags
+    register_type: holding
+    address: 1133
+    value_type: U_WORD
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    filters:
+      - timeout: 90s
+
+  - platform: modbus_controller
+    modbus_controller_id: hws_controller
+    name: Fault Flags
+    register_type: holding
+    address: 2085
+    value_type: U_WORD
+    accuracy_decimals: 0
+    entity_category: diagnostic
+
+binary_sensor:
+  - <<: &heater_status
+      platform: modbus_controller
+      modbus_controller_id: hws_controller
+      register_type: holding
+    name: Power
+    address: 1011
+    bitmask: 0x0001
+    device_class: power
+
+  - <<: *heater_status
+    name: Electric Boost Requested
+    address: 1014
+    bitmask: 0x0001
+
+  - <<: *heater_status
+    name: Compressor Running
+    address: 2050
+    bitmask: 0x0100
+    device_class: running
+
+  - <<: *heater_status
+    name: Electric Heater Running
+    address: 2050
+    bitmask: 0x0200
+    device_class: running
+
+  - <<: *heater_status
+    name: Fan High Speed
+    address: 2050
+    bitmask: 0x0800
+    device_class: running
+
+  - <<: *heater_status
+    name: Defrost Active
+    address: 2051
+    bitmask: 0x0004
+    device_class: running
+
+  - <<: *heater_status
+    name: Fault
+    address: 2085
+    bitmask: 0xFFFF
+    device_class: problem
+    entity_category: diagnostic
+
+text_sensor:
+  - <<: &operating_mode
+      platform: modbus_controller
+      modbus_controller_id: hws_controller
+      register_type: holding
+      response_size: 2
+      raw_encode: HEXBYTES
+      filters:
+        - map:
+            - 0000 -> Intelligent
+            - 0002 -> Economic
+            - 0003 -> Hybrid
+            - 0004 -> High Demand
+            - 0007 -> Vacation
+    name: Selected Operating Mode
+    address: 1012
+
+  - <<: *operating_mode
+    name: Active Operating Mode
+    address: 1013
