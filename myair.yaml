@@ -1,0 +1,83 @@
+---
+substitutions:
+  system_name: myair
+  friendly_name: MyAir
+  device_description: ATOMS3 Lite with Atomic RS485 base
+
+esp32:
+  board: m5stack-atoms3
+  framework:
+    advanced:
+      flash_chip: gd
+
+packages:
+  device: !include
+    file: esp32/base.yaml
+
+external_components:
+  - source: github://hydazz/myair-esphome@5b995e49bbfa0224c192829576b6e54d91664556
+    components: [myair]
+
+uart:
+  id: cb_uart
+  tx_pin: GPIO6
+  rx_pin: GPIO5
+  baud_rate: 57600
+  rx_buffer_size: 2048
+
+sensor:
+  - platform: homeassistant
+    id: ac_power
+    entity_id: sensor.house_ac_energy_meter_total_active_power
+    internal: true
+
+myair:
+  power_feedback:
+    sensor: ac_power
+    idle_below: 75 W
+  uart_id: cb_uart
+  zones:
+    - zone: 1
+      name: Living Room
+      sensor_uid: "011210"
+      airflow_weight: 1.1
+
+    - zone: 2
+      name: Lounge
+      sensor_uid: "011205"
+      airflow_weight: 3
+
+    - zone: 3
+      name: Attic
+      sensor_uid: "01186e"
+      airflow_weight: 2.8
+
+    - zone: 4
+      name: Master Bedroom
+      sensor_uid: "01187f"
+      airflow_weight: 2
+
+    - zone: 5
+      name: Alex's Bedroom
+      sensor_uid: "011880"
+
+    - zone: 6
+      name: Spare Bedroom
+      sensor_uid: "011882"
+
+    - zone: 7
+      name: Office
+      sensor_uid: "011858"
+
+    - zone: 8
+      name: Guest Bathroom
+      sensor_uid: "011884"
+
+    - zone: 9
+      name: Guest Toilet
+      sensor_uid: "011886"
+      airflow_weight: 0.6
+
+    - zone: 10
+      name: Laundry
+      sensor_uid: "01189d"
