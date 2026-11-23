@@ -15,7 +15,7 @@ packages:
     file: esp32/base.yaml
 
 external_components:
-  - source: github://hydazz/myair-esphome@5b995e49bbfa0224c192829576b6e54d91664556
+  - source: github://hydazz/myair-esphome@74b1ef7c3e73a3f1a91ea1037a30912640de22bd
     components: [myair]
 
 uart:
